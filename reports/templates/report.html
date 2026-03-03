@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/style-{{ theme }}.css?v={{ app.version }}" />
 </head>
 <body>
+  {# ── Macros ─────────────────────────────────────────────── #}
   {% macro pill(status, label, value="") -%}
     <li class="pill {{ status }}">
       <span class="dot"></span>
@@ -14,6 +15,20 @@
     </li>
   {%- endmacro %}
 
+  {% macro check_panel(status, title) %}
+  <div class="check-panel {{ status }}">
+    <div class="check-header">
+      <span class="check-title">
+        <span class="check-dot"></span>
+        {{ title }}
+      </span>
+      <span class="status-tag {{ status }}">{{ status }}</span>
+    </div>
+    {{ caller() }}
+  </div>
+  {% endmacro %}
+
+  {# ── Template variables ──────────────────────────────────── #}
   {% set spf = email.spf %}
   {% set dmarc = email.dmarc %}
   {% set tls = web.tls %}
@@ -26,7 +41,7 @@
   {% set mta = email.mta_sts %}
   {% set tlsr = email.tls_rpt %}
 
-  {# derive simple statuses #}
+  {# ── Derived statuses ────────────────────────────────────── #}
   {% set spf_status = "good" %}
   {% if not spf.present %}{% set spf_status="bad" %}
   {% elif "allow all" in (spf.policy|lower) %}{% set spf_status="bad" %}
@@ -44,14 +59,17 @@
   {% elif (tls.days_left is not none) and (tls.days_left < 14) %}{% set tls_status="warn" %}
   {% endif %}
 
-  {% set hsts_status = "good" if hsts.present and (not hsts.issues) else ("warn" if hsts.present else "warn") %}
+  {% set hsts_status = "good" if hsts.present and (not hsts.issues) else "warn" %}
   {% set csp_status = "good" if ("content-security-policy" in headers) else "warn" %}
   {% set caa_status = "good" if caa else "warn" %}
   {% set dnssec_status = "good" if dnssec.dnskey_present else "warn" %}
   {% set mta_status = "good" if mta.dns_present else "info" %}
   {% set tlsr_status = "good" if tlsr.present else "info" %}
   {% set cookie_status = "good" if (not cookies.issues) else "warn" %}
+  {% set dkim_status = "good" if email.dkim.present_likely else "warn" %}
+  {% set headers_status = "good" if (probe.https_ok and headers and hsts.present and not hsts.issues and "content-security-policy" in headers) else "warn" %}
 
+  {# ── Header ──────────────────────────────────────────────── #}
   <header class="header">
     <div class="container">
       <div class="title">
@@ -68,10 +86,13 @@
   </header>
 
   <main class="container">
+
+    {# ── At a glance ─────────────────────────────────────────── #}
     <section class="card">
       <h2>At a glance</h2>
       <p class="muted">
-        This report uses <strong>public signals only</strong> (DNS, HTTPS/TLS, and HTTP response headers). It is a <strong>posture assessment</strong>, not a penetration test.
+        This report uses <strong>public signals only</strong> (DNS, HTTPS/TLS, and HTTP response headers).
+        It is a <strong>posture assessment</strong>, not a penetration test.
       </p>
       <p class="small muted">Jump to:
         <a href="#email">Email</a> • <a href="#web">Web & TLS</a> • <a href="#dns">DNS</a> • <a href="#recs">Recommendations</a>
@@ -107,15 +128,15 @@
       </p>
     </section>
 
+    {# ── Email + Web grid ────────────────────────────────────── #}
     <section class="grid">
+
+      {# Email Security #}
       <section class="card" id="email">
         <h2>Email security</h2>
-        <p class="small muted">Click sections to expand details.</p>
-
         <div class="kv"><span>MX provider</span><span>{{ dns.mx_provider }}</span></div>
 
-        <details>
-          <summary>SPF</summary>
+        {% call check_panel(spf_status, "SPF") %}
           {% if spf.present %}
             <div class="kv"><span>Policy</span><span>{{ spf.policy }}</span></div>
             <div class="kv"><span>Lookup estimate</span><span>{{ spf.lookup_estimate }}</span></div>
@@ -125,23 +146,19 @@
                 <ul>{% for i in spf.issues %}<li>{{ i }}</li>{% endfor %}</ul>
               </div>
             {% else %}
-              <p class="good">No SPF issues detected.</p>
+              <p class="good small">No SPF issues detected.</p>
             {% endif %}
-            <details>
-              <summary>Show SPF record</summary>
-              <pre><code>{{ spf.records[0] }}</code></pre>
-            </details>
+            <pre class="record-box"><code>{{ spf.records[0] }}</code></pre>
           {% else %}
             <div class="callout bad"><strong>Missing SPF</strong> — publish an SPF TXT record.</div>
           {% endif %}
-        </details>
+        {% endcall %}
 
-        <details>
-          <summary>DKIM (best-effort discovery)</summary>
-          <p class="muted">{{ email.dkim.notes }}</p>
+        {% call check_panel(dkim_status, "DKIM — best-effort discovery") %}
+          <p class="muted small">{{ email.dkim.notes }}</p>
           {% if email.dkim.present_likely %}
-            <p class="good">Some common DKIM selectors exist.</p>
-            <ul>
+            <p class="good small">Some common DKIM selectors exist.</p>
+            <ul class="small">
               {% for f in email.dkim.found %}
                 <li><code>{{ f.selector }}</code> — {{ f.type }}</li>
               {% endfor %}
@@ -151,10 +168,9 @@
               <strong>No common selectors found</strong> (this does not prove DKIM is missing).
             </div>
           {% endif %}
-        </details>
+        {% endcall %}
 
-        <details>
-          <summary>DMARC</summary>
+        {% call check_panel(dmarc_status, "DMARC") %}
           {% if dmarc.present %}
             <div class="kv"><span>Policy</span><span>{{ dmarc.policy }}</span></div>
             {% if dmarc.issues %}
@@ -163,42 +179,36 @@
                 <ul>{% for i in dmarc.issues %}<li>{{ i }}</li>{% endfor %}</ul>
               </div>
             {% else %}
-              <p class="good">DMARC present with no major issues detected.</p>
+              <p class="good small">DMARC present with no major issues detected.</p>
             {% endif %}
-            <details>
-              <summary>Show DMARC record</summary>
-              <pre><code>{{ dmarc.record }}</code></pre>
-            </details>
+            <pre class="record-box"><code>{{ dmarc.record }}</code></pre>
           {% else %}
             <div class="callout bad"><strong>Missing DMARC</strong> — add <code>_dmarc.{{ domain }}</code>.</div>
           {% endif %}
-        </details>
+        {% endcall %}
 
-        <details>
-          <summary>MTA-STS & TLS-RPT</summary>
+        {% call check_panel(mta_status, "MTA-STS & TLS-RPT") %}
           <div class="kv"><span>MTA-STS DNS</span><span>{{ "present" if mta.dns_present else "not detected" }}</span></div>
           <div class="kv"><span>TLS-RPT DNS</span><span>{{ "present" if tlsr.present else "not detected" }}</span></div>
-          <p class="muted small">These are optional hardening features for mail transport security.</p>
-        </details>
+          <p class="muted small">Optional hardening features for mail transport security.</p>
+        {% endcall %}
       </section>
 
+      {# Web & TLS #}
       <section class="card" id="web">
         <h2>Web & TLS</h2>
-        <p class="small muted">Click sections to expand details.</p>
 
-        <details>
-          <summary>HTTPS & certificate</summary>
+        {% call check_panel(tls_status, "HTTPS & Certificate") %}
           {% if tls.https %}
             <div class="kv"><span>Certificate expires</span><span>{{ tls.expires_at or "unknown" }}</span></div>
             <div class="kv"><span>Days left</span><span>{{ tls.days_left if tls.days_left is not none else "unknown" }}</span></div>
           {% else %}
             <div class="callout bad"><strong>HTTPS/TLS not reachable</strong>: {{ tls.error }}</div>
           {% endif %}
-          <div class="kv"><span>HTTP → HTTPS</span><span>{{ "yes" if probe.http_to_https else "no/unknown" }}</span></div>
-        </details>
+          <div class="kv"><span>HTTP → HTTPS redirect</span><span>{{ "yes" if probe.http_to_https else "no/unknown" }}</span></div>
+        {% endcall %}
 
-        <details>
-          <summary>Security headers</summary>
+        {% call check_panel(headers_status, "Security Headers") %}
           {% if probe.https_ok %}
             {% if headers %}
               <table>
@@ -221,64 +231,79 @@
           {% elif hsts.issues %}
             <div class="callout warn"><strong>HSTS could be stronger</strong><ul>{% for i in hsts.issues %}<li>{{ i }}</li>{% endfor %}</ul></div>
           {% else %}
-            <p class="good">HSTS looks good.</p>
+            <p class="good small">HSTS looks good.</p>
           {% endif %}
 
           {% if "content-security-policy" not in headers %}
             <div class="callout warn"><strong>CSP missing</strong> — add Content-Security-Policy (start with report-only mode).</div>
           {% else %}
-            <p class="good">CSP present.</p>
+            <p class="good small">CSP present.</p>
           {% endif %}
-        </details>
+        {% endcall %}
 
-        <details>
-          <summary>Cookies</summary>
+        {% call check_panel(cookie_status, "Cookies") %}
           <div class="kv"><span>Cookies seen</span><span>{{ cookies.cookies_seen }}</span></div>
           {% if cookies.issues %}
             <div class="callout warn"><strong>Cookie warnings</strong><ul>{% for i in cookies.issues %}<li>{{ i }}</li>{% endfor %}</ul></div>
           {% else %}
-            <p class="muted">No cookie issues detected (or no cookies set).</p>
+            <p class="muted small">No cookie issues detected (or no cookies set).</p>
           {% endif %}
-        </details>
+        {% endcall %}
       </section>
+
     </section>
 
+    {# ── DNS Posture ──────────────────────────────────────────── #}
     <section class="card" id="dns">
       <h2>DNS posture</h2>
-      {% if not caa %}
-        <div class="callout warn"><strong>CAA missing</strong> — any CA may issue certificates for this domain.</div>
-      {% endif %}
-      {% if not dnssec.dnskey_present %}
-        <div class="callout warn"><strong>DNSSEC not detected</strong> — consider enabling DNSSEC if supported by your registrar/DNS provider.</div>
-      {% endif %}
 
-      <details>
-        <summary>Common subdomains (existence only)</summary>
-        <p class="muted small">Existence checks only (A/AAAA/CNAME). No crawling.</p>
-        <table>
-          <thead><tr><th>Name</th><th>Exists</th><th>Target</th></tr></thead>
-          <tbody>
-          {% for s in osint.common_subdomains %}
-            <tr>
-              <td><code>{{ s.name }}</code></td>
-              <td>{{ "yes" if s.exists else "no" }}</td>
-              <td>{{ s.target or "" }}</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </details>
+      <div class="dns-checks">
+        {% call check_panel(caa_status, "CAA Records") %}
+          {% if caa %}
+            <p class="good small">CAA records present — certificate authority restrictions are configured.</p>
+          {% else %}
+            <div class="callout warn"><strong>CAA missing</strong> — any CA may issue certificates for this domain.</div>
+          {% endif %}
+        {% endcall %}
+
+        {% call check_panel(dnssec_status, "DNSSEC") %}
+          {% if dnssec.dnskey_present %}
+            <p class="good small">DNSKEY record detected — DNS responses are signed.</p>
+          {% else %}
+            <div class="callout warn"><strong>DNSSEC not detected</strong> — consider enabling if supported by your registrar/DNS provider.</div>
+          {% endif %}
+        {% endcall %}
+      </div>
+
+      <h3>Common subdomains</h3>
+      <p class="muted small">Existence checks only (A/AAAA/CNAME). No crawling.</p>
+      <table>
+        <thead><tr><th>Name</th><th>Exists</th><th>Target</th></tr></thead>
+        <tbody>
+        {% for s in osint.common_subdomains %}
+          <tr>
+            <td><code>{{ s.name }}</code></td>
+            <td>
+              {% if s.exists %}<span class="good">yes</span>{% else %}<span class="muted">no</span>{% endif %}
+            </td>
+            <td>{{ s.target or "" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </section>
 
+    {# ── Recommendations ──────────────────────────────────────── #}
     <section class="card" id="recs">
       <h2>Recommendations</h2>
-      <ol>
+      <ol class="recs-list">
         {% for r in recommendations %}
           <li>{{ r }}</li>
         {% endfor %}
       </ol>
     </section>
 
+    {# ── Limitations ──────────────────────────────────────────── #}
     <section class="card">
       <h2>Limitations & responsible use</h2>
       <ul>
