@@ -4,7 +4,7 @@ app:
 
 http:
   timeout_seconds: 6
-  user_agent: "DomainPostureAnalyzer/1.1 (+educational)"
+  user_agent: "DomainPostureAnalyzer/1.5 (+educational)"
 
 dns:
   timeout_seconds: 3
