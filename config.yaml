@@ -1,0 +1,74 @@
+app:
+  name: Domain Security Posture Analyzer
+  version: 1.5.0
+
+http:
+  timeout_seconds: 6
+  user_agent: "DomainPostureAnalyzer/1.1 (+educational)"
+
+dns:
+  timeout_seconds: 3
+  common_subdomains:
+    - mail
+    - webmail
+    - smtp
+    - imap
+    - pop
+    - autodiscover
+    - autoconfig
+    - vpn
+    - admin
+    - dev
+    - staging
+    - api
+
+dkim:
+  common_selectors:
+    - default
+    - selector1
+    - selector2
+    - google
+    - s1
+    - s2
+    - mail
+    - smtp
+    - dkim
+    - hostingermail-a
+    - hostingermail-b
+    - hostingermail-c
+
+scoring:
+  # Additive points, clamped to 0..100 for a more "product-like" feel.
+  issues:
+    no_spf: 15
+    spf_softfail: 6
+    spf_neutral: 6
+    spf_allow_all: 25
+    spf_multiple_records: 8
+    spf_lookup_over_10_risk: 6
+
+    no_dmarc: 20
+    dmarc_none: 10
+    dmarc_quarantine: 5
+    dmarc_bad_name_hint: 5
+    dmarc_no_rua: 4
+    dmarc_pct_lt_100: 3
+
+    no_https: 25
+    cert_expired: 25
+    cert_expires_soon_14d: 8
+    no_hsts: 6
+    weak_hsts: 3
+
+    no_csp: 5
+    missing_security_headers: 1
+
+    insecure_cookies: 6
+    no_caa: 2
+    dnssec_missing: 2
+
+  thresholds:
+    low: 0
+    moderate: 25
+    high: 50
+    critical: 75

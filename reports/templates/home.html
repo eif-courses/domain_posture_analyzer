@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Domain Security Posture Analyzer</title>
+  <link rel="stylesheet" href="/static/style-light.css?v=1.4.0" />
+</head>
+<body>
+  <main class="container">
+    <section class="card">
+      <h1>Domain Security Posture Analyzer</h1>
+      <p class="muted">Generate a public-signal security posture report (DNS / Email auth / TLS / Headers).</p>
+      <form method="get" action="/report">
+        <label for="domain">Domain</label><br />
+        <input id="domain" name="domain" placeholder="example.com" style="width:100%;padding:10px;margin:8px 0;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:var(--text)">
+        <button style="padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:var(--text);cursor:pointer">Generate report</button>
+      </form>
+      <p class="muted">Try: <a href="/report?domain=gmail.com">gmail.com</a> • <a href="/report?domain=programuoki.lt">programuoki.lt</a></p>
+    </section>
+  </main>
+</body>
+</html>

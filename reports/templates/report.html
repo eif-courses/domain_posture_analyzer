@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ app.name }} – Report for {{ domain }}</title>
+  <link rel="stylesheet" href="/static/style-{{ theme }}.css?v={{ app.version }}" />
+</head>
+<body>
+  {% macro pill(status, label, value="") -%}
+    <li class="pill {{ status }}">
+      <span class="dot"></span>
+      <span><strong>{{ label }}</strong>{% if value %}: {{ value }}{% endif %}</span>
+    </li>
+  {%- endmacro %}
+
+  {% set spf = email.spf %}
+  {% set dmarc = email.dmarc %}
+  {% set tls = web.tls %}
+  {% set probe = web.probe %}
+  {% set headers = (probe.get("https", {}) or {}).get("headers", {}) if probe.get("https_ok") else {} %}
+  {% set hsts = web.hsts_eval %}
+  {% set cookies = web.cookies_eval %}
+  {% set dnssec = dns.dnssec %}
+  {% set caa = dns.caa %}
+  {% set mta = email.mta_sts %}
+  {% set tlsr = email.tls_rpt %}
+
+  {# derive simple statuses #}
+  {% set spf_status = "good" %}
+  {% if not spf.present %}{% set spf_status="bad" %}
+  {% elif "allow all" in (spf.policy|lower) %}{% set spf_status="bad" %}
+  {% elif "softfail" in (spf.policy|lower) or spf.issues %}{% set spf_status="warn" %}
+  {% endif %}
+
+  {% set dmarc_status = "good" %}
+  {% if not dmarc.present %}{% set dmarc_status="bad" %}
+  {% elif dmarc.policy|lower == "none" %}{% set dmarc_status="warn" %}
+  {% elif dmarc.policy|lower == "quarantine" %}{% set dmarc_status="warn" %}
+  {% endif %}
+
+  {% set tls_status = "good" %}
+  {% if not tls.https %}{% set tls_status="bad" %}
+  {% elif (tls.days_left is not none) and (tls.days_left < 14) %}{% set tls_status="warn" %}
+  {% endif %}
+
+  {% set hsts_status = "good" if hsts.present and (not hsts.issues) else ("warn" if hsts.present else "warn") %}
+  {% set csp_status = "good" if ("content-security-policy" in headers) else "warn" %}
+  {% set caa_status = "good" if caa else "warn" %}
+  {% set dnssec_status = "good" if dnssec.dnskey_present else "warn" %}
+  {% set mta_status = "good" if mta.dns_present else "info" %}
+  {% set tlsr_status = "good" if tlsr.present else "info" %}
+  {% set cookie_status = "good" if (not cookies.issues) else "warn" %}
+
+  <header class="header">
+    <div class="container">
+      <div class="title">
+        <h1>{{ app.name }}</h1>
+        <p class="muted">Version {{ app.version }} • Generated {{ generated_at_utc }} (UTC)</p>
+        <p class="small muted"><strong>Target:</strong> {{ domain }}</p>
+        <p class="small muted">Theme: <a href="/report/{{ domain }}?theme=light">Light</a> • <a href="/report/{{ domain }}?theme=dark">Dark</a></p>
+      </div>
+      <div class="badge badge-{{ risk.level|lower }}">
+        <div class="badge-score">{{ risk.score_0_100 }}/100</div>
+        <div class="badge-level">{{ risk.level }} risk</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>At a glance</h2>
+      <p class="muted">
+        This report uses <strong>public signals only</strong> (DNS, HTTPS/TLS, and HTTP response headers). It is a <strong>posture assessment</strong>, not a penetration test.
+      </p>
+      <p class="small muted">Jump to:
+        <a href="#email">Email</a> • <a href="#web">Web & TLS</a> • <a href="#dns">DNS</a> • <a href="#recs">Recommendations</a>
+      </p>
+
+      <ul class="pills">
+        {{ pill(spf_status, "SPF", spf.policy if spf.present else "missing") }}
+        {{ pill(dmarc_status, "DMARC", dmarc.policy if dmarc.present else "missing") }}
+        {{ pill(tls_status, "HTTPS/TLS", ("expires in ~%s days"|format(tls.days_left)) if (tls.https and tls.days_left is not none) else ("not reachable" if not tls.https else "unknown")) }}
+        {{ pill("good" if probe.http_to_https else "warn", "HTTP→HTTPS", "yes" if probe.http_to_https else "no/unknown") }}
+        {{ pill(hsts_status, "HSTS", "present" if hsts.present else "missing") }}
+        {{ pill(csp_status, "CSP", "present" if ("content-security-policy" in headers) else "missing") }}
+        {{ pill(caa_status, "CAA", "present" if caa else "missing") }}
+        {{ pill(dnssec_status, "DNSSEC", "DNSKEY present" if dnssec.dnskey_present else "not detected") }}
+        {{ pill(mta_status, "MTA-STS", "present" if mta.dns_present else "not detected") }}
+        {{ pill(tlsr_status, "TLS-RPT", "present" if tlsr.present else "not detected") }}
+      </ul>
+
+      {% if risk.reasons %}
+      <div class="callout {{ 'bad' if risk.level in ['High','Critical'] else 'warn' }}">
+        <strong>Top warnings:</strong>
+        <ul>
+          {% for r in risk.reasons %}
+            <li>{{ r }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <p class="small muted">
+        OWASP mapping (high-level):
+        {% if owasp_mapped %}{{ owasp_mapped|join(" • ") }}{% else %}—{% endif %}
+      </p>
+    </section>
+
+    <section class="grid">
+      <section class="card" id="email">
+        <h2>Email security</h2>
+        <p class="small muted">Click sections to expand details.</p>
+
+        <div class="kv"><span>MX provider</span><span>{{ dns.mx_provider }}</span></div>
+
+        <details>
+          <summary>SPF</summary>
+          {% if spf.present %}
+            <div class="kv"><span>Policy</span><span>{{ spf.policy }}</span></div>
+            <div class="kv"><span>Lookup estimate</span><span>{{ spf.lookup_estimate }}</span></div>
+            {% if spf.issues %}
+              <div class="callout warn">
+                <strong>Warnings</strong>
+                <ul>{% for i in spf.issues %}<li>{{ i }}</li>{% endfor %}</ul>
+              </div>
+            {% else %}
+              <p class="good">No SPF issues detected.</p>
+            {% endif %}
+            <details>
+              <summary>Show SPF record</summary>
+              <pre><code>{{ spf.records[0] }}</code></pre>
+            </details>
+          {% else %}
+            <div class="callout bad"><strong>Missing SPF</strong> — publish an SPF TXT record.</div>
+          {% endif %}
+        </details>
+
+        <details>
+          <summary>DKIM (best-effort discovery)</summary>
+          <p class="muted">{{ email.dkim.notes }}</p>
+          {% if email.dkim.present_likely %}
+            <p class="good">Some common DKIM selectors exist.</p>
+            <ul>
+              {% for f in email.dkim.found %}
+                <li><code>{{ f.selector }}</code> — {{ f.type }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="callout warn">
+              <strong>No common selectors found</strong> (this does not prove DKIM is missing).
+            </div>
+          {% endif %}
+        </details>
+
+        <details>
+          <summary>DMARC</summary>
+          {% if dmarc.present %}
+            <div class="kv"><span>Policy</span><span>{{ dmarc.policy }}</span></div>
+            {% if dmarc.issues %}
+              <div class="callout warn">
+                <strong>Warnings</strong>
+                <ul>{% for i in dmarc.issues %}<li>{{ i }}</li>{% endfor %}</ul>
+              </div>
+            {% else %}
+              <p class="good">DMARC present with no major issues detected.</p>
+            {% endif %}
+            <details>
+              <summary>Show DMARC record</summary>
+              <pre><code>{{ dmarc.record }}</code></pre>
+            </details>
+          {% else %}
+            <div class="callout bad"><strong>Missing DMARC</strong> — add <code>_dmarc.{{ domain }}</code>.</div>
+          {% endif %}
+        </details>
+
+        <details>
+          <summary>MTA-STS & TLS-RPT</summary>
+          <div class="kv"><span>MTA-STS DNS</span><span>{{ "present" if mta.dns_present else "not detected" }}</span></div>
+          <div class="kv"><span>TLS-RPT DNS</span><span>{{ "present" if tlsr.present else "not detected" }}</span></div>
+          <p class="muted small">These are optional hardening features for mail transport security.</p>
+        </details>
+      </section>
+
+      <section class="card" id="web">
+        <h2>Web & TLS</h2>
+        <p class="small muted">Click sections to expand details.</p>
+
+        <details>
+          <summary>HTTPS & certificate</summary>
+          {% if tls.https %}
+            <div class="kv"><span>Certificate expires</span><span>{{ tls.expires_at or "unknown" }}</span></div>
+            <div class="kv"><span>Days left</span><span>{{ tls.days_left if tls.days_left is not none else "unknown" }}</span></div>
+          {% else %}
+            <div class="callout bad"><strong>HTTPS/TLS not reachable</strong>: {{ tls.error }}</div>
+          {% endif %}
+          <div class="kv"><span>HTTP → HTTPS</span><span>{{ "yes" if probe.http_to_https else "no/unknown" }}</span></div>
+        </details>
+
+        <details>
+          <summary>Security headers</summary>
+          {% if probe.https_ok %}
+            {% if headers %}
+              <table>
+                <thead><tr><th>Header</th><th>Value (truncated)</th></tr></thead>
+                <tbody>
+                  {% for k,v in headers.items() %}
+                    <tr><td><code>{{ k }}</code></td><td>{{ (v|string)[:140] }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <div class="callout warn"><strong>No key security headers detected</strong> in the HTTPS response.</div>
+            {% endif %}
+          {% else %}
+            <div class="callout warn"><strong>Could not fetch HTTPS headers.</strong></div>
+          {% endif %}
+
+          {% if not hsts.present %}
+            <div class="callout warn"><strong>HSTS missing</strong> — consider enabling Strict-Transport-Security.</div>
+          {% elif hsts.issues %}
+            <div class="callout warn"><strong>HSTS could be stronger</strong><ul>{% for i in hsts.issues %}<li>{{ i }}</li>{% endfor %}</ul></div>
+          {% else %}
+            <p class="good">HSTS looks good.</p>
+          {% endif %}
+
+          {% if "content-security-policy" not in headers %}
+            <div class="callout warn"><strong>CSP missing</strong> — add Content-Security-Policy (start with report-only mode).</div>
+          {% else %}
+            <p class="good">CSP present.</p>
+          {% endif %}
+        </details>
+
+        <details>
+          <summary>Cookies</summary>
+          <div class="kv"><span>Cookies seen</span><span>{{ cookies.cookies_seen }}</span></div>
+          {% if cookies.issues %}
+            <div class="callout warn"><strong>Cookie warnings</strong><ul>{% for i in cookies.issues %}<li>{{ i }}</li>{% endfor %}</ul></div>
+          {% else %}
+            <p class="muted">No cookie issues detected (or no cookies set).</p>
+          {% endif %}
+        </details>
+      </section>
+    </section>
+
+    <section class="card" id="dns">
+      <h2>DNS posture</h2>
+      {% if not caa %}
+        <div class="callout warn"><strong>CAA missing</strong> — any CA may issue certificates for this domain.</div>
+      {% endif %}
+      {% if not dnssec.dnskey_present %}
+        <div class="callout warn"><strong>DNSSEC not detected</strong> — consider enabling DNSSEC if supported by your registrar/DNS provider.</div>
+      {% endif %}
+
+      <details>
+        <summary>Common subdomains (existence only)</summary>
+        <p class="muted small">Existence checks only (A/AAAA/CNAME). No crawling.</p>
+        <table>
+          <thead><tr><th>Name</th><th>Exists</th><th>Target</th></tr></thead>
+          <tbody>
+          {% for s in osint.common_subdomains %}
+            <tr>
+              <td><code>{{ s.name }}</code></td>
+              <td>{{ "yes" if s.exists else "no" }}</td>
+              <td>{{ s.target or "" }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    </section>
+
+    <section class="card" id="recs">
+      <h2>Recommendations</h2>
+      <ol>
+        {% for r in recommendations %}
+          <li>{{ r }}</li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>Limitations & responsible use</h2>
+      <ul>
+        {% for l in limitations %}
+          <li>{{ l }}</li>
+        {% endfor %}
+      </ul>
+      <p class="muted small">
+        Active scanning (e.g., OWASP ZAP) requires explicit written authorization and should be run on staging/lab targets.
+      </p>
+    </section>
+
+    <footer class="footer muted small">
+      Generated by {{ app.name }} • {{ app.version }}
+    </footer>
+  </main>
+</body>
+</html>
