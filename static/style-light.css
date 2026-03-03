@@ -128,20 +128,81 @@ th{font-weight:600}
 .warn{color:var(--warn)}
 .bad{color:var(--bad)}
 
-details{
-  border:1px solid var(--border);
+/* ── Check panels (replaces accordion details/summary) ── */
+.check-panel{
   border-radius:10px;
-  padding:10px 12px;
+  border:1px solid var(--border);
+  border-left:4px solid var(--border);
+  padding:12px 14px;
+  margin:8px 0;
   background:#f9fafb;
-  margin:10px 0;
 }
-summary{
-  cursor:pointer;
+.check-panel.good{border-left-color:var(--good)}
+.check-panel.warn{border-left-color:var(--warn)}
+.check-panel.bad {border-left-color:var(--bad)}
+.check-panel.info{border-left-color:var(--info)}
+
+.check-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:8px;
+}
+.check-title{
   font-weight:600;
-  color:#111827
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#111827;
 }
-summary:before{content:"▸ ";color:var(--muted)}
-details[open] summary:before{content:"▾ ";}
+.check-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--muted);
+  flex-shrink:0;
+}
+.check-panel.good .check-dot{background:var(--good)}
+.check-panel.warn .check-dot{background:var(--warn)}
+.check-panel.bad  .check-dot{background:var(--bad)}
+.check-panel.info .check-dot{background:var(--info)}
+
+.status-tag{
+  font-size:10px;
+  font-weight:700;
+  padding:2px 8px;
+  border-radius:999px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.status-tag.good{background:#dcfce7;color:#15803d}
+.status-tag.warn{background:#fef3c7;color:#92400e}
+.status-tag.bad {background:#fee2e2;color:#991b1b}
+.status-tag.info{background:#dbeafe;color:#1e40af}
+
+.record-box{
+  background:#f3f4f6;
+  border-radius:8px;
+  padding:10px 12px;
+  margin:8px 0 0;
+  overflow-x:auto;
+  font-size:12px;
+  border:1px solid var(--border);
+}
+.record-box code{background:none;padding:0}
+
+.dns-checks{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-bottom:16px;
+}
+@media (max-width:640px){.dns-checks{grid-template-columns:1fr}}
+
+.recs-list{padding-left:20px}
+.recs-list li{padding:5px 0;border-bottom:1px dashed var(--border)}
+.recs-list li:last-child{border-bottom:none}
 
 .callout{
   border-left:4px solid var(--warn);
