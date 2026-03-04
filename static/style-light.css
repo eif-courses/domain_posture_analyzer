@@ -51,6 +51,7 @@ a:hover{text-decoration:underline}
 }
 
 .grid{display:grid;grid-template-columns:1fr;gap:16px}
+.grid>*{min-width:0}
 @media (min-width: 980px){.grid{grid-template-columns:1fr 1fr}}
 
 h2{margin:0 0 12px;font-size:18px}
@@ -74,6 +75,7 @@ code{
 
 table{
   width:100%;
+  table-layout:fixed;
   border-collapse:collapse;
   margin-top:8px
 }
@@ -81,7 +83,10 @@ th,td{
   padding:8px;
   border-bottom:1px solid var(--border);
   text-align:left;
-  vertical-align:top
+  vertical-align:top;
+  overflow-wrap:break-word;
+  word-break:break-word;
+  max-width:0
 }
 th{font-weight:600}
 
