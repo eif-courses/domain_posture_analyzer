@@ -24,15 +24,27 @@ dns:
 
 dkim:
   common_selectors:
+    # Generic / common
     - default
-    - selector1
-    - selector2
-    - google
-    - s1
-    - s2
+    - dkim
     - mail
     - smtp
-    - dkim
+    # Google Workspace (legacy selector + date-format selectors)
+    - google
+    - 20230601
+    - 20221208
+    # Microsoft 365
+    - selector1
+    - selector2
+    # Zoho
+    - zoho
+    # Mailchimp / Mandrill
+    - k1
+    - k2
+    # SendGrid
+    - s1
+    - s2
+    # Hostinger
     - hostingermail-a
     - hostingermail-b
     - hostingermail-c

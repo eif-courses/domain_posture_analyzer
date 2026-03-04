@@ -139,6 +139,13 @@
         {% call check_panel(spf_status, "SPF") %}
           {% if spf.present %}
             <div class="kv"><span>Policy</span><span>{{ spf.policy }}</span></div>
+            {% if spf.redirect_domain %}
+              <div class="callout info">
+                <strong>SPF uses redirect=</strong> — delegating entirely to <code>{{ spf.redirect_domain }}</code><br/>
+                Resolved policy: <strong>{{ spf.resolved_policy }}</strong><br/>
+                <small>This is normal for Google Workspace and similar providers. The redirect mechanism replaces the local record with the provider's authorised IP ranges.</small>
+              </div>
+            {% endif %}
             <div class="kv"><span>Lookup estimate</span><span>{{ spf.lookup_estimate }}</span></div>
             {% if spf.issues %}
               <div class="callout warn">
@@ -172,7 +179,13 @@
 
         {% call check_panel(dmarc_status, "DMARC") %}
           {% if dmarc.present %}
-            <div class="kv"><span>Policy</span><span>{{ dmarc.policy }}</span></div>
+            <table>
+              <thead><tr><th>Scope</th><th>Policy (p=)</th></tr></thead>
+              <tbody>
+                <tr><td>Main domain</td><td><strong>{{ dmarc.policy or "—" }}</strong></td></tr>
+                <tr><td>Subdomains (sp=)</td><td><strong>{{ dmarc.subdomain_policy or dmarc.policy or "inherits p=" }}</strong></td></tr>
+              </tbody>
+            </table>
             {% if dmarc.issues %}
               <div class="callout warn">
                 <strong>Warnings</strong>
@@ -180,6 +193,9 @@
               </div>
             {% else %}
               <p class="good small">DMARC present with no major issues detected.</p>
+            {% endif %}
+            {% if dmarc.tags.rua %}
+              <div class="kv"><span>Aggregate reports (rua=)</span><span>{{ dmarc.tags.rua }}</span></div>
             {% endif %}
             <pre class="record-box"><code>{{ dmarc.record }}</code></pre>
           {% else %}
@@ -247,6 +263,36 @@
             <div class="callout warn"><strong>Cookie warnings</strong><ul>{% for i in cookies.issues %}<li>{{ i }}</li>{% endfor %}</ul></div>
           {% else %}
             <p class="muted small">No cookie issues detected (or no cookies set).</p>
+          {% endif %}
+        {% endcall %}
+
+        {% set sec_txt = web.security_txt %}
+        {% set rob_txt = web.robots_txt %}
+        {% set sec_txt_status = "good" if sec_txt.present else "info" %}
+        {% set rob_txt_status = "good" if rob_txt.present else "info" %}
+
+        {% call check_panel(sec_txt_status, "security.txt (RFC 9116)") %}
+          {% if sec_txt.present %}
+            <p class="good small">security.txt found — vulnerability disclosure contact is published.</p>
+            <div class="kv"><span>URL</span><span><code>{{ sec_txt.url }}</code></span></div>
+          {% else %}
+            <div class="callout info">
+              <strong>security.txt not found</strong> — consider publishing
+              <code>/.well-known/security.txt</code> so researchers can report vulnerabilities
+              responsibly (RFC 9116).
+            </div>
+          {% endif %}
+        {% endcall %}
+
+        {% call check_panel(rob_txt_status, "robots.txt") %}
+          {% if rob_txt.present %}
+            <p class="good small">robots.txt is accessible.</p>
+            <div class="kv"><span>URL</span><span><code>{{ rob_txt.url }}</code></span></div>
+            {% if not rob_txt.has_directives %}
+              <p class="muted small">File exists but no User-agent directives were detected.</p>
+            {% endif %}
+          {% else %}
+            <div class="callout info"><strong>robots.txt not accessible</strong> — {{ rob_txt.note }}</div>
           {% endif %}
         {% endcall %}
       </section>

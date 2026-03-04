@@ -80,6 +80,36 @@ def http_probe(domain: str, *, timeout: float, user_agent: str) -> Dict[str, Any
         "http": http_data,
     }
 
+def check_security_txt(domain: str, *, timeout: float, user_agent: str) -> Dict[str, Any]:
+    """Check for security.txt per RFC 9116 (/.well-known/security.txt, fallback /security.txt)."""
+    req_headers = {"User-Agent": user_agent}
+    for path in ["/.well-known/security.txt", "/security.txt"]:
+        url = f"https://{domain}{path}"
+        try:
+            with httpx.Client(timeout=timeout, follow_redirects=True, headers=req_headers) as client:
+                r = client.get(url)
+            if r.status_code == 200 and "contact:" in r.text.lower():
+                return {"present": True, "url": url, "note": "security.txt found (RFC 9116)"}
+        except Exception:
+            continue
+    return {"present": False, "note": "No security.txt at /.well-known/security.txt or /security.txt"}
+
+
+def check_robots_txt(domain: str, *, timeout: float, user_agent: str) -> Dict[str, Any]:
+    """Check if robots.txt is publicly accessible."""
+    url = f"https://{domain}/robots.txt"
+    req_headers = {"User-Agent": user_agent}
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True, headers=req_headers) as client:
+            r = client.get(url)
+        if r.status_code == 200:
+            has_directives = "user-agent" in r.text.lower()
+            return {"present": True, "url": url, "has_directives": has_directives, "note": "robots.txt accessible"}
+        return {"present": False, "url": url, "note": f"robots.txt returned HTTP {r.status_code}"}
+    except Exception as e:
+        return {"present": False, "url": url, "note": f"Could not fetch robots.txt: {str(e)[:80]}"}
+
+
 def evaluate_hsts(hsts_value: Optional[str]) -> Dict[str, Any]:
     if not hsts_value:
         return {"present": False, "issues": ["HSTS not present"]}
