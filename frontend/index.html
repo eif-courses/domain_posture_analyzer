@@ -16,23 +16,32 @@
     h1{font-size:20px;margin:0}
     .muted{color:var(--muted)}
     .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin:12px 0}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    input[type="text"]{padding:10px 12px;border:1px solid var(--border);border-radius:10px;min-width:280px}
-    input[type="url"]{padding:10px 12px;border:1px solid var(--border);border-radius:10px;min-width:360px}
-    button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+    input[type="text"]{padding:10px 12px;border:1px solid var(--border);border-radius:10px;width:100%;min-width:200px}
+    input[type="url"]{padding:10px 12px;border:1px solid var(--border);border-radius:10px;width:100%;min-width:200px}
+    .input-group{flex:1;min-width:200px;max-width:360px}
+    button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;white-space:nowrap}
     button:hover{background:#f9fafb}
     .badge{display:inline-flex;align-items:baseline;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff}
     .score{font-size:28px;font-weight:800}
     .level{font-size:12px;color:var(--muted)}
     .pills{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0;padding:0;list-style:none}
-    .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:#f9fafb;font-size:12px}
-    .dot{width:9px;height:9px;border-radius:999px;background:var(--muted)}
+    .pill{
+      display:inline-flex;align-items:flex-start;gap:7px;padding:6px 10px;
+      border-radius:12px;border:1px solid var(--border);background:#f9fafb;
+      font-size:12px;max-width:100%;word-break:break-word;overflow-wrap:anywhere;
+    }
+    .dot{width:9px;height:9px;border-radius:999px;background:var(--muted);flex-shrink:0;margin-top:3px}
     .pill.good .dot{background:var(--good)} .pill.warn .dot{background:var(--warn)}
     .pill.bad .dot{background:var(--bad)} .pill.info .dot{background:var(--info)}
-    table{width:100%;border-collapse:collapse;margin-top:10px}
-    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+    .pill-text{min-width:0;word-break:break-word;overflow-wrap:anywhere}
+    table{width:100%;border-collapse:collapse;margin-top:10px;table-layout:fixed}
+    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;word-break:break-word;overflow-wrap:anywhere}
     th{font-size:12px;color:var(--muted);font-weight:700}
-    code{background:#f3f4f6;padding:2px 6px;border-radius:6px}
+    th:nth-child(1){width:28%}
+    th:nth-child(2){width:14%}
+    th:nth-child(3){width:58%}
+    code{background:#f3f4f6;padding:2px 6px;border-radius:6px;word-break:break-all}
     .grid{display:grid;grid-template-columns:1fr;gap:12px}
     @media(min-width:960px){.grid{grid-template-columns:1fr 1fr}}
     .error{border-left:4px solid var(--bad);background:#fef2f2}
@@ -40,6 +49,14 @@
     .footer{font-size:12px;color:var(--muted);padding:16px 0;text-align:center}
     details{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#f9fafb;margin-top:10px}
     summary{cursor:pointer;font-weight:700}
+    pre{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;margin:10px 0 0;font-size:12px}
+    .note{font-size:11px;color:var(--muted);margin-top:2px;font-style:italic}
+    .check-val{word-break:break-word;overflow-wrap:anywhere}
+    .status-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+    .status-badge.good{background:#dcfce7;color:#15803d}
+    .status-badge.warn{background:#fef9c3;color:#a16207}
+    .status-badge.bad{background:#fee2e2;color:#b91c1c}
+    .status-badge.info{background:#dbeafe;color:#1d4ed8}
   </style>
 </head>
 <body>
@@ -49,22 +66,22 @@
         <h1>Domain Security Dashboard</h1>
         <div class="muted" id="subtitle">Public-signal posture (DNS / Email / TLS / Headers)</div>
       </div>
-      <div class="muted" id="apiInfo"></div>
+      <div class="muted" id="apiInfo" style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
     </header>
 
     <section class="card">
       <div class="row">
-        <label>
+        <div class="input-group">
           <div class="muted" style="font-size:12px;margin-bottom:6px;">Domain</div>
           <input id="domainInput" type="text" placeholder="example.com" />
-        </label>
+        </div>
 
-        <label>
+        <div class="input-group">
           <div class="muted" style="font-size:12px;margin-bottom:6px;">API Base URL</div>
           <input id="apiBaseInput" type="url" placeholder="https://your-api.example.com" />
-        </label>
+        </div>
 
-        <div style="display:flex;gap:8px;align-items:end;">
+        <div style="display:flex;gap:8px;">
           <button id="runBtn">Run checks</button>
           <button id="shareBtn" title="Copy link with ?domain=">Copy link</button>
         </div>
@@ -77,17 +94,17 @@
 
     <section id="statusCard" class="card" style="display:none;">
       <div class="row" style="justify-content:space-between;">
-        <div>
+        <div style="min-width:0;flex:1">
           <div class="muted" style="font-size:12px;">Target</div>
-          <div style="font-size:18px;font-weight:800" id="targetDomain">—</div>
+          <div style="font-size:18px;font-weight:800;word-break:break-all" id="targetDomain">—</div>
           <div class="muted" style="font-size:12px;margin-top:4px;" id="generatedAt">—</div>
         </div>
 
-        <div class="badge">
+        <div class="badge" style="flex-shrink:0;margin-left:12px">
           <div class="score" id="score">—</div>
           <div>
             <div class="level" id="level">—</div>
-            <div class="muted" style="font-size:12px;" id="scoreHint">score_0_100</div>
+            <div class="muted" style="font-size:12px;" id="scoreHint">risk score</div>
           </div>
         </div>
       </div>
@@ -96,17 +113,17 @@
 
       <details>
         <summary>Top recommendations</summary>
-        <ol id="recs"></ol>
+        <ol id="recs" style="padding-left:18px;margin:10px 0 0"></ol>
       </details>
     </section>
 
     <section id="grid" class="grid" style="display:none;">
       <section class="card">
         <h2 style="margin:0 0 8px;font-size:16px;">Checks</h2>
-        <div class="muted" style="font-size:12px;">Each check returns <code>{status, value}</code>.</div>
+        <div class="muted" style="font-size:12px;">Each check returns <code>{status, value}</code>. Notes shown where relevant.</div>
         <table>
           <thead>
-            <tr><th>Check</th><th>Status</th><th>Value</th></tr>
+            <tr><th>Check</th><th>Status</th><th>Value / Note</th></tr>
           </thead>
           <tbody id="checksTable"></tbody>
         </table>
@@ -117,7 +134,7 @@
         <div class="muted" style="font-size:12px;">Useful for debugging and learning.</div>
         <details open>
           <summary>Show response</summary>
-          <pre id="raw" style="white-space:pre-wrap;margin:10px 0 0;"></pre>
+          <pre id="raw"></pre>
         </details>
       </section>
     </section>

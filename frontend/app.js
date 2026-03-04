@@ -4,7 +4,7 @@
 //   domain, generated_at_utc?,
 //   score or score_0_100,
 //   level,
-//   checks: { key: {status, value} },
+//   checks: { key: {status, value, note?, confidence?} },
 //   recommendations: [...]
 // }
 
@@ -69,6 +69,12 @@ function clearError() {
   errorText.textContent = "";
 }
 
+// Truncate for pill display — full value shown in the table
+function truncate(str, max = 48) {
+  if (!str) return "";
+  return str.length > max ? str.slice(0, max) + "…" : str;
+}
+
 function render(data) {
   statusCard.style.display = "block";
   grid.style.display = "grid";
@@ -90,22 +96,31 @@ function render(data) {
   const level = data.level || "—";
   levelEl.textContent = level;
 
-  // Pills — email + web security checks shown prominently; info-only checks shown subtly
-  pillsEl.innerHTML = "";
-  const checks = data.checks || {};
   // Priority order: email auth first, then web, then extras
-  const PRIORITY = ["spf","dmarc","dkim","https_tls","http_to_https","hsts","csp","mta_sts","tls_rpt","caa","dnssec","cookies","security_txt","robots_txt"];
+  const PRIORITY = [
+    "spf","dmarc","dkim","email_provider",
+    "https_tls","http_to_https","hsts","csp",
+    "mta_sts","tls_rpt","caa","dnssec","cookies",
+    "security_txt","robots_txt",
+  ];
+
+  const checks = data.checks || {};
   const orderedKeys = [
     ...PRIORITY.filter(k => k in checks),
     ...Object.keys(checks).filter(k => !PRIORITY.includes(k)),
   ];
+
+  // Pills — email + web security checks shown prominently
+  pillsEl.innerHTML = "";
   for (const k of orderedKeys) {
     const item = checks[k] || {};
     const cls = statusClass(item.status);
+    const label = k.replace(/_/g, " ");
+    const shortVal = truncate(item.value ?? "");
     const li = document.createElement("li");
     li.className = `pill ${cls}`;
-    const label = k.replace(/_/g, " ");
-    li.innerHTML = `<span class="dot"></span><span><strong>${escapeHtml(label)}</strong>: ${escapeHtml(item.value ?? "")}</span>`;
+    li.title = item.value ?? "";
+    li.innerHTML = `<span class="dot"></span><span class="pill-text"><strong>${escapeHtml(label)}</strong>: ${escapeHtml(shortVal)}</span>`;
     pillsEl.appendChild(li);
   }
 
@@ -120,25 +135,32 @@ function render(data) {
     for (const r of recs) {
       const li = document.createElement("li");
       li.textContent = r;
+      li.style.marginBottom = "6px";
       recsEl.appendChild(li);
     }
   }
 
-  // Checks table (same priority order as pills)
+  // Checks table — full values, with optional note row
   checksTable.innerHTML = "";
-  const tableKeys = [
-    ...PRIORITY.filter(k => k in checks),
-    ...Object.keys(checks).filter(k => !PRIORITY.includes(k)),
-  ];
-  for (const k of tableKeys) {
+  for (const k of orderedKeys) {
     const v = checks[k];
     const cls = statusClass(v?.status);
     const label = k.replace(/_/g, " ");
     const tr = document.createElement("tr");
+
+    // Build value cell: value + optional confidence badge + optional note
+    let valueHtml = `<div class="check-val">${escapeHtml(v?.value ?? "")}</div>`;
+    if (v?.confidence && v.confidence !== "high") {
+      valueHtml += `<div class="note">confidence: ${escapeHtml(v.confidence)}</div>`;
+    }
+    if (v?.note) {
+      valueHtml += `<div class="note">${escapeHtml(v.note)}</div>`;
+    }
+
     tr.innerHTML = `
       <td><code>${escapeHtml(label)}</code></td>
-      <td><span class="${cls}"><strong>${escapeHtml(v?.status ?? "")}</strong></span></td>
-      <td>${escapeHtml(v?.value ?? "")}</td>
+      <td><span class="status-badge ${cls}">${escapeHtml(v?.status ?? "")}</span></td>
+      <td>${valueHtml}</td>
     `;
     checksTable.appendChild(tr);
   }
