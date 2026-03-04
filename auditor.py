@@ -103,6 +103,83 @@ def audit(domain: str, *, include_subdomains: bool = True) -> Dict[str, Any]:
     return findings
 
 
+def derive_check_statuses(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a flat dict of check-name → {status, value} for every signal.
+
+    Status values: "good" | "warn" | "bad" | "info"
+    This mirrors the status logic used in the HTML report template so API
+    consumers get consistent signal colours without re-implementing them.
+    """
+    spf   = data["email"]["spf"]
+    dmarc = data["email"]["dmarc"]
+    dkim  = data["email"]["dkim"]
+    mta   = data["email"]["mta_sts"]
+    tlsr  = data["email"]["tls_rpt"]
+    tls   = data["web"]["tls"]
+    probe = data["web"]["probe"]
+    hsts  = data["web"]["hsts_eval"]
+    ck    = data["web"]["cookies_eval"]
+    dnssec = data["dns"]["dnssec"]
+    caa    = data["dns"]["caa"]
+
+    headers: Dict[str, Any] = {}
+    if probe.get("https_ok"):
+        headers = (probe.get("https") or {}).get("headers") or {}
+
+    # ── SPF ──────────────────────────────────────────────────────────────
+    spf_status = "good"
+    if not spf.get("present"):
+        spf_status = "bad"
+    elif "allow all" in (spf.get("policy") or "").lower():
+        spf_status = "bad"
+    elif "softfail" in (spf.get("policy") or "").lower() or spf.get("issues"):
+        spf_status = "warn"
+
+    # ── DMARC ─────────────────────────────────────────────────────────────
+    dmarc_status = "good"
+    if not dmarc.get("present"):
+        dmarc_status = "bad"
+    elif (dmarc.get("policy") or "").lower() in ("none", "quarantine"):
+        dmarc_status = "warn"
+
+    # ── TLS ───────────────────────────────────────────────────────────────
+    tls_status = "good"
+    if not tls.get("https"):
+        tls_status = "bad"
+    elif tls.get("days_left") is not None and int(tls["days_left"]) < 14:
+        tls_status = "warn"
+    if tls.get("https") and tls.get("days_left") is not None:
+        tls_value = f"expires in ~{tls['days_left']} days"
+    elif not tls.get("https"):
+        tls_value = "not reachable"
+    else:
+        tls_value = "unknown"
+
+    hsts_status   = "good" if hsts.get("present") and not hsts.get("issues") else "warn"
+    csp_status    = "good" if "content-security-policy" in headers else "warn"
+    caa_status    = "good" if caa else "warn"
+    dnssec_status = "good" if dnssec.get("dnskey_present") else "warn"
+    mta_status    = "good" if mta.get("dns_present") else "info"
+    tlsr_status   = "good" if tlsr.get("present") else "info"
+    cookie_status = "good" if not ck.get("issues") else "warn"
+    dkim_status   = "good" if dkim.get("present_likely") else "warn"
+
+    return {
+        "spf":           {"status": spf_status,    "value": spf.get("policy") if spf.get("present") else "missing"},
+        "dmarc":         {"status": dmarc_status,   "value": dmarc.get("policy") if dmarc.get("present") else "missing"},
+        "dkim":          {"status": dkim_status,    "value": "selectors found" if dkim.get("present_likely") else "not detected"},
+        "mta_sts":       {"status": mta_status,     "value": "present" if mta.get("dns_present") else "not detected"},
+        "tls_rpt":       {"status": tlsr_status,    "value": "present" if tlsr.get("present") else "not detected"},
+        "https_tls":     {"status": tls_status,     "value": tls_value},
+        "http_to_https": {"status": "good" if probe.get("http_to_https") else "warn", "value": "yes" if probe.get("http_to_https") else "no/unknown"},
+        "hsts":          {"status": hsts_status,    "value": "present" if hsts.get("present") else "missing"},
+        "csp":           {"status": csp_status,     "value": "present" if "content-security-policy" in headers else "missing"},
+        "caa":           {"status": caa_status,     "value": "present" if caa else "missing"},
+        "dnssec":        {"status": dnssec_status,  "value": "DNSKEY present" if dnssec.get("dnskey_present") else "not detected"},
+        "cookies":       {"status": cookie_status,  "value": f"{ck.get('cookies_seen', 0)} seen, {len(ck.get('issues') or [])} issue(s)"},
+    }
+
+
 def build_recommendations(f: Dict[str, Any]) -> List[str]:
     recs: List[str] = []
     spf = f["email"]["spf"]
