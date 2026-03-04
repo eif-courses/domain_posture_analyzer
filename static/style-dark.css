@@ -29,14 +29,15 @@ a:hover{text-decoration:underline}
 .small{font-size:12px}
 .card{background:rgba(17,26,46,.92);border:1px solid var(--border);border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .grid{display:grid;grid-template-columns:1fr;gap:12px}
+.grid>*{min-width:0}
 @media (min-width: 980px){.grid{grid-template-columns:1fr 1fr}}
 h2{margin:0 0 8px;font-size:18px}
 h3{margin:14px 0 8px;font-size:14px;color:#dfe7ff}
 .kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.08)}
 .kv:last-child{border-bottom:none}
 code{background:rgba(255,255,255,.06);padding:2px 6px;border-radius:8px}
-table{width:100%;border-collapse:collapse;margin-top:8px}
-th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left;vertical-align:top}
+table{width:100%;table-layout:fixed;border-collapse:collapse;margin-top:8px}
+th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:break-word;max-width:0}
 th{color:#dfe7ff;font-weight:600}
 .badge{min-width:170px;padding:10px 12px;border-radius:14px;border:1px solid var(--border);text-align:right;display:flex;flex-direction:column;gap:2px;}
 .badge-score{font-size:22px;font-weight:800}
