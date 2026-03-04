@@ -21,6 +21,7 @@ from checks.dns_email import (
 )
 from checks.web_tls import tls_certificate_info, http_probe, evaluate_hsts, check_security_txt, check_robots_txt
 from checks.cookies import analyze_set_cookie
+from checks.provider_fingerprint import detect_email_provider
 from scoring.scorer import score_findings
 from scoring.owasp_map import map_tags
 
@@ -52,6 +53,13 @@ def audit(domain: str, *, include_subdomains: bool = True) -> Dict[str, Any]:
 
     mta_sts = check_mta_sts(d, timeout=dns_timeout)
     tls_rpt = check_tls_rpt(d, timeout=dns_timeout)
+
+    dkim_cnames = [item["value"] for item in dkim.get("found", []) if item.get("type") == "CNAME/A"]
+    email_provider = detect_email_provider(
+        mx_hosts=[h for _, h in mx],
+        spf_txt_records=txt_root,
+        dkim_cnames=dkim_cnames,
+    )
 
     caa = dns_caa(d, timeout=dns_timeout)
     dnssec = {"dnskey_present": dns_dnskey_present(d, timeout=dns_timeout)}
@@ -87,7 +95,7 @@ def audit(domain: str, *, include_subdomains: bool = True) -> Dict[str, Any]:
         "theme": "light",
         "app": cfg["app"],
         "dns": {"mx": mx, "mx_provider": mx_provider, "txt_root": txt_root, "caa": caa, "dnssec": dnssec},
-        "email": {"spf": spf, "dmarc": dmarc, "dkim": dkim, "mta_sts": mta_sts, "tls_rpt": tls_rpt},
+        "email": {"spf": spf, "dmarc": dmarc, "dkim": dkim, "mta_sts": mta_sts, "tls_rpt": tls_rpt, "provider": email_provider},
         "web": {"tls": tls, "probe": probe, "hsts_eval": hsts_eval, "cookies_eval": cookies_eval,
                 "security_txt": security_txt, "robots_txt": robots_txt},
         "osint": {"common_subdomains": subdomains},
@@ -170,11 +178,22 @@ def derive_check_statuses(data: Dict[str, Any]) -> Dict[str, Any]:
 
     sec_txt  = data["web"].get("security_txt", {})
     rob_txt  = data["web"].get("robots_txt", {})
+    provider = data["email"].get("provider", {})
+
+    dkim_value = "selectors found" if dkim.get("present_likely") else "selector not discovered"
+    dkim_note = "DKIM discovery is best-effort; absence does not prove DKIM is missing" if not dkim.get("present_likely") else None
+
+    sec_txt_note = None if sec_txt.get("present") else "Some organizations publish security.txt only on their primary domain"
+
+    provider_name = provider.get("name", "Unknown")
+    provider_conf = provider.get("confidence", "low")
+    provider_value = f"{provider_name}" if provider_name != "Unknown" else "not identified"
+    provider_note = "; ".join(provider.get("evidence", [])) or None
 
     return {
         "spf":           {"status": spf_status,    "value": spf.get("policy") if spf.get("present") else "missing"},
         "dmarc":         {"status": dmarc_status,   "value": dmarc.get("policy") if dmarc.get("present") else "missing"},
-        "dkim":          {"status": dkim_status,    "value": "selectors found" if dkim.get("present_likely") else "not detected"},
+        "dkim":          {"status": dkim_status,    "value": dkim_value, "confidence": "low" if not dkim.get("present_likely") else "medium", "note": dkim_note},
         "mta_sts":       {"status": mta_status,     "value": "present" if mta.get("dns_present") else "not detected"},
         "tls_rpt":       {"status": tlsr_status,    "value": "present" if tlsr.get("present") else "not detected"},
         "https_tls":     {"status": tls_status,     "value": tls_value},
@@ -184,8 +203,9 @@ def derive_check_statuses(data: Dict[str, Any]) -> Dict[str, Any]:
         "caa":           {"status": caa_status,     "value": "present" if caa else "missing"},
         "dnssec":        {"status": dnssec_status,  "value": "DNSKEY present" if dnssec.get("dnskey_present") else "not detected"},
         "cookies":       {"status": cookie_status,  "value": f"{ck.get('cookies_seen', 0)} seen, {len(ck.get('issues') or [])} issue(s)"},
-        "security_txt":  {"status": "good" if sec_txt.get("present") else "info", "value": "present" if sec_txt.get("present") else "not found"},
+        "security_txt":  {"status": "good" if sec_txt.get("present") else "info", "value": "present" if sec_txt.get("present") else "not found", "note": sec_txt_note},
         "robots_txt":    {"status": "good" if rob_txt.get("present") else "info", "value": "present" if rob_txt.get("present") else "not found"},
+        "email_provider": {"status": "info", "value": provider_value, "confidence": provider_conf, "note": provider_note},
     }
 
 

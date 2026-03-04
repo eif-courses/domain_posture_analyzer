@@ -135,6 +135,7 @@ def api_email(domain: str):
         "domain": data["domain"],
         "generated_at_utc": data["generated_at_utc"],
         "mx_provider": data["dns"]["mx_provider"],
+        "provider": data["email"].get("provider", {}),
         "spf": data["email"]["spf"],
         "dkim": data["email"]["dkim"],
         "dmarc": data["email"]["dmarc"],
