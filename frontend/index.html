@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Domain Security Dashboard</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#ffffff; --text:#111827; --muted:#6b7280; --border:#e5e7eb;
+      --good:#16a34a; --warn:#d97706; --bad:#dc2626; --info:#2563eb;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1100px;margin:0 auto;padding:18px}
+    header{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{font-size:20px;margin:0}
+    .muted{color:var(--muted)}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin:12px 0}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input[type="text"]{padding:10px 12px;border:1px solid var(--border);border-radius:10px;min-width:280px}
+    input[type="url"]{padding:10px 12px;border:1px solid var(--border);border-radius:10px;min-width:360px}
+    button{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer}
+    button:hover{background:#f9fafb}
+    .badge{display:inline-flex;align-items:baseline;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff}
+    .score{font-size:28px;font-weight:800}
+    .level{font-size:12px;color:var(--muted)}
+    .pills{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0;padding:0;list-style:none}
+    .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:#f9fafb;font-size:12px}
+    .dot{width:9px;height:9px;border-radius:999px;background:var(--muted)}
+    .pill.good .dot{background:var(--good)} .pill.warn .dot{background:var(--warn)}
+    .pill.bad .dot{background:var(--bad)} .pill.info .dot{background:var(--info)}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+    th{font-size:12px;color:var(--muted);font-weight:700}
+    code{background:#f3f4f6;padding:2px 6px;border-radius:6px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:960px){.grid{grid-template-columns:1fr 1fr}}
+    .error{border-left:4px solid var(--bad);background:#fef2f2}
+    .loading{opacity:.7}
+    .footer{font-size:12px;color:var(--muted);padding:16px 0;text-align:center}
+    details{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#f9fafb;margin-top:10px}
+    summary{cursor:pointer;font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Domain Security Dashboard</h1>
+        <div class="muted" id="subtitle">Public-signal posture (DNS / Email / TLS / Headers)</div>
+      </div>
+      <div class="muted" id="apiInfo"></div>
+    </header>
+
+    <section class="card">
+      <div class="row">
+        <label>
+          <div class="muted" style="font-size:12px;margin-bottom:6px;">Domain</div>
+          <input id="domainInput" type="text" placeholder="example.com" />
+        </label>
+
+        <label>
+          <div class="muted" style="font-size:12px;margin-bottom:6px;">API Base URL</div>
+          <input id="apiBaseInput" type="url" placeholder="https://your-api.example.com" />
+        </label>
+
+        <div style="display:flex;gap:8px;align-items:end;">
+          <button id="runBtn">Run checks</button>
+          <button id="shareBtn" title="Copy link with ?domain=">Copy link</button>
+        </div>
+      </div>
+
+      <div class="muted" style="margin-top:10px;font-size:12px;">
+        Uses <code>GET /api/v1/{domain}/summary</code>. CORS must allow your origin.
+      </div>
+    </section>
+
+    <section id="statusCard" class="card" style="display:none;">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <div class="muted" style="font-size:12px;">Target</div>
+          <div style="font-size:18px;font-weight:800" id="targetDomain">—</div>
+          <div class="muted" style="font-size:12px;margin-top:4px;" id="generatedAt">—</div>
+        </div>
+
+        <div class="badge">
+          <div class="score" id="score">—</div>
+          <div>
+            <div class="level" id="level">—</div>
+            <div class="muted" style="font-size:12px;" id="scoreHint">score_0_100</div>
+          </div>
+        </div>
+      </div>
+
+      <ul class="pills" id="pills"></ul>
+
+      <details>
+        <summary>Top recommendations</summary>
+        <ol id="recs"></ol>
+      </details>
+    </section>
+
+    <section id="grid" class="grid" style="display:none;">
+      <section class="card">
+        <h2 style="margin:0 0 8px;font-size:16px;">Checks</h2>
+        <div class="muted" style="font-size:12px;">Each check returns <code>{status, value}</code>.</div>
+        <table>
+          <thead>
+            <tr><th>Check</th><th>Status</th><th>Value</th></tr>
+          </thead>
+          <tbody id="checksTable"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2 style="margin:0 0 8px;font-size:16px;">Raw JSON</h2>
+        <div class="muted" style="font-size:12px;">Useful for debugging and learning.</div>
+        <details open>
+          <summary>Show response</summary>
+          <pre id="raw" style="white-space:pre-wrap;margin:10px 0 0;"></pre>
+        </details>
+      </section>
+    </section>
+
+    <section id="errorCard" class="card error" style="display:none;">
+      <h2 style="margin:0 0 8px;font-size:16px;">Error</h2>
+      <div id="errorText" class="muted"></div>
+    </section>
+
+    <div class="footer">
+      Tip: add <code>?domain=programuoki.lt</code> to the URL for a shareable demo link.
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
