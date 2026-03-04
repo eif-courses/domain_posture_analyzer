@@ -136,6 +136,19 @@
         <h2>Email security</h2>
         <div class="kv"><span>MX provider</span><span>{{ dns.mx_provider }}</span></div>
 
+        {% set provider = email.provider %}
+        {% if provider and provider.name != "Unknown" %}
+        <div class="callout info">
+          <strong>Detected email provider:</strong> {{ provider.name }}
+          <span class="muted small">(confidence: {{ provider.confidence }})</span>
+          {% if provider.evidence %}
+          <ul class="small">
+            {% for e in provider.evidence %}<li>{{ e }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+        {% endif %}
+
         {% call check_panel(spf_status, "SPF") %}
           {% if spf.present %}
             <div class="kv"><span>Policy</span><span>{{ spf.policy }}</span></div>
