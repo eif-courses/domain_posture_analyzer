@@ -110,6 +110,25 @@ def _spf_policy(txt: str) -> str:
         return "allow all (+all)"
     return "unknown"
 
+
+def _resolve_spf_redirect(target_domain: str, *, timeout: float, depth: int = 0) -> str:
+    """Follow SPF redirect= chains to find the effective policy. Max 3 hops."""
+    if depth > 3:
+        return "unknown (redirect chain too deep)"
+    try:
+        txt = dns_txt(target_domain, timeout=timeout)
+        spf_recs = [t.strip() for t in txt if _SPF_RE.search(t)]
+        if not spf_recs:
+            return "unknown (redirect target has no SPF)"
+        rec = spf_recs[0]
+        redir_match = re.search(r"\bredirect=(\S+)", rec, re.IGNORECASE)
+        if redir_match:
+            next_domain = redir_match.group(1).rstrip(".")
+            return _resolve_spf_redirect(next_domain, timeout=timeout, depth=depth + 1)
+        return _spf_policy(rec)
+    except Exception:
+        return "unknown (error resolving redirect)"
+
 def estimate_spf_lookups(spf_record: str) -> int:
     """Rough estimate of SPF DNS lookup count.
 
@@ -127,7 +146,7 @@ def estimate_spf_lookups(spf_record: str) -> int:
     count += len(re.findall(r"(?<![a-z0-9])ptr(?![a-z0-9])", s))
     return count
 
-def parse_spf(txt_records: List[str]) -> Dict[str, Any]:
+def parse_spf(txt_records: List[str], *, timeout: float = 3.0) -> Dict[str, Any]:
     spf = [t.strip() for t in txt_records if _SPF_RE.search(t)]
     if not spf:
         return {"present": False, "records": [], "issues": ["No SPF TXT record found"]}
@@ -136,15 +155,38 @@ def parse_spf(txt_records: List[str]) -> Dict[str, Any]:
     if len(spf) > 1:
         issues.append("Multiple SPF records found (can cause SPF PERMERROR)")
 
-    policy = _spf_policy(spf[0])
+    record = spf[0]
+
+    # Detect redirect= delegation (e.g. Google Workspace: redirect=_spf.google.com)
+    redirect_match = re.search(r"\bredirect=(\S+)", record, re.IGNORECASE)
+    redirect_domain: Optional[str] = None
+    resolved_policy: Optional[str] = None
+
+    if redirect_match:
+        redirect_domain = redirect_match.group(1).rstrip(".")
+        resolved_policy = _resolve_spf_redirect(redirect_domain, timeout=timeout)
+        policy = f"redirect → {redirect_domain} ({resolved_policy})"
+    else:
+        policy = _spf_policy(record)
+
     if "allow all" in policy:
         issues.append("SPF uses +all (allows any sender) — insecure")
 
-    lookup_est = estimate_spf_lookups(spf[0])
+    lookup_est = estimate_spf_lookups(record)
     if lookup_est > 10:
         issues.append(f"Estimated SPF DNS lookups ~{lookup_est} (>10 limit) — may cause SPF failures")
 
-    return {"present": True, "records": spf, "policy": policy, "issues": issues, "lookup_estimate": lookup_est}
+    result: Dict[str, Any] = {
+        "present": True,
+        "records": spf,
+        "policy": policy,
+        "issues": issues,
+        "lookup_estimate": lookup_est,
+    }
+    if redirect_domain:
+        result["redirect_domain"] = redirect_domain
+        result["resolved_policy"] = resolved_policy
+    return result
 
 def parse_dmarc(txt_records: List[str]) -> Dict[str, Any]:
     dmarc = [t.strip() for t in txt_records if _DMARC_RE.search(t)]
@@ -181,7 +223,16 @@ def parse_dmarc(txt_records: List[str]) -> Dict[str, Any]:
         except Exception:
             pass
 
-    return {"present": True, "record": record, "tags": tags, "policy": policy, "issues": issues}
+    subdomain_policy: Optional[str] = tags.get("sp", "").lower() or None
+
+    return {
+        "present": True,
+        "record": record,
+        "tags": tags,
+        "policy": policy,
+        "subdomain_policy": subdomain_policy,
+        "issues": issues,
+    }
 
 def discover_dkim(domain: str, selectors: List[str], *, timeout: float) -> Dict[str, Any]:
     found: List[Dict[str, str]] = []

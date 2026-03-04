@@ -90,17 +90,22 @@ function render(data) {
   const level = data.level || "—";
   levelEl.textContent = level;
 
-  // Pills
+  // Pills — email + web security checks shown prominently; info-only checks shown subtly
   pillsEl.innerHTML = "";
   const checks = data.checks || {};
-  // show top 8 as pills
-  const keys = Object.keys(checks).slice(0, 10);
-  for (const k of keys) {
+  // Priority order: email auth first, then web, then extras
+  const PRIORITY = ["spf","dmarc","dkim","https_tls","http_to_https","hsts","csp","mta_sts","tls_rpt","caa","dnssec","cookies","security_txt","robots_txt"];
+  const orderedKeys = [
+    ...PRIORITY.filter(k => k in checks),
+    ...Object.keys(checks).filter(k => !PRIORITY.includes(k)),
+  ];
+  for (const k of orderedKeys) {
     const item = checks[k] || {};
     const cls = statusClass(item.status);
     const li = document.createElement("li");
     li.className = `pill ${cls}`;
-    li.innerHTML = `<span class="dot"></span><span><strong>${escapeHtml(k)}</strong>: ${escapeHtml(item.value ?? "")}</span>`;
+    const label = k.replace(/_/g, " ");
+    li.innerHTML = `<span class="dot"></span><span><strong>${escapeHtml(label)}</strong>: ${escapeHtml(item.value ?? "")}</span>`;
     pillsEl.appendChild(li);
   }
 
@@ -119,13 +124,19 @@ function render(data) {
     }
   }
 
-  // Checks table
+  // Checks table (same priority order as pills)
   checksTable.innerHTML = "";
-  for (const [k, v] of Object.entries(checks)) {
+  const tableKeys = [
+    ...PRIORITY.filter(k => k in checks),
+    ...Object.keys(checks).filter(k => !PRIORITY.includes(k)),
+  ];
+  for (const k of tableKeys) {
+    const v = checks[k];
     const cls = statusClass(v?.status);
+    const label = k.replace(/_/g, " ");
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><code>${escapeHtml(k)}</code></td>
+      <td><code>${escapeHtml(label)}</code></td>
       <td><span class="${cls}"><strong>${escapeHtml(v?.status ?? "")}</strong></span></td>
       <td>${escapeHtml(v?.value ?? "")}</td>
     `;
